@@ -10,6 +10,7 @@ package registry
 import (
 	"log/slog"
 
+	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/agy"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/claudecode"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/codex"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/cursor"
@@ -19,6 +20,7 @@ import (
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/omp"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/opencode"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/pi"
+	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/agyjson"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/claudeacp"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/codexappserver"
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/chatdriver/cursoracp"
@@ -56,13 +58,15 @@ func New(drivers ...ports.ChatDriver) *Registry {
 //
 // Codex uses its native app-server protocol. Claude Code uses AO's reusable ACP
 // transport plus claude-agent-acp, pointed at the user's own Claude executable.
-// Cursor, OpenCode, Droid, Kimi, Kimchi, Pi, and OMP expose ACP themselves, so AO
-// launches the exact executable resolved by each existing agent plugin. No path
-// scrapes terminal output or packages a second provider CLI.
+// Cursor, OpenCode, Droid, Kimi, Kimchi, Pi, and OMP expose ACP themselves. Agy
+// uses its native headless stream-json protocol with workspace hooks for AO
+// system-prompt injection and approval decisions. No path scrapes terminal output
+// or packages a second provider CLI.
 //
-// Every other harness stays TUI-only until the same is true of it. The driver
-// reuses the harness's existing agent plugin for binary resolution and auth, so
-// registration adds no second answer to "is this agent installed and logged in".
+// Every other harness stays TUI-only until it exposes a safe structured control
+// surface. Drivers reuse each harness's existing agent plugin for binary
+// resolution and auth, so registration adds no second answer to "is this agent
+// installed and logged in".
 func Build(log *slog.Logger) *Registry {
 	return New(
 		codexappserver.New(codex.New(), log),
@@ -74,6 +78,7 @@ func Build(log *slog.Logger) *Registry {
 		piacp.New(pi.New(), log),
 		cursoracp.New(cursor.New(), log),
 		ompacp.New(omp.New(), log),
+		agyjson.New(agy.New(), log),
 	)
 }
 
