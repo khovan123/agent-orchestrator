@@ -1,5 +1,5 @@
 // Package agyjson implements AO Chat UI over Agy's machine-readable print mode.
-// The native Agy terminal adapter remains unchanged; this driver is used only
+// The native Agy terminal adapter remains separate; this driver is used only
 // when a session explicitly runs in Chat mode.
 package agyjson
 
@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -28,9 +29,11 @@ const (
 	hookFileName       = "hooks.json"
 	managedHookName    = "agent-orchestrator-chat"
 	hookTokenEnv       = "AO_AGY_CHAT_HOOK_TOKEN"
-	hookCommandPrefix  = "ao agy-chat-hook "
+	hookCommandSuffix  = " agy-chat-hook "
 	hookTimeoutSeconds = 3600
 )
+
+var agyCurrentAOExecutable = os.Executable
 
 type agyPlugin interface {
 	ResolveBinary(context.Context) (string, error)
@@ -127,6 +130,7 @@ func (d *Driver) Resume(ctx context.Context, cfg ports.ChatResumeConfig) (ports.
 		sessionID:              cfg.SessionID,
 		workspacePath:          cfg.WorkspacePath,
 		env:                    cfg.Env,
+		model:                  cfg.Model,
 		permissions:            cfg.Permissions,
 		systemPrompt:           cfg.SystemPrompt,
 		additionalDirectories:  cfg.AdditionalDirectories,
@@ -218,6 +222,10 @@ type hookDefinition struct {
 }
 
 func installChatHooks(workspacePath string) error {
+	prefix, err := chatHookCommandPrefix()
+	if err != nil {
+		return fmt.Errorf("resolve AO hook executable: %w", err)
+	}
 	hooksDir := filepath.Join(workspacePath, hookDirName)
 	hooksPath := filepath.Join(hooksDir, hookFileName)
 	file := hookFile{}
@@ -234,12 +242,12 @@ func installChatHooks(workspacePath string) error {
 
 	definition := hookDefinition{
 		PreInvocation: []hookHandler{{
-			Type: "command", Command: hookCommandPrefix + "pre-invocation", Timeout: hookTimeoutSeconds,
+			Type: "command", Command: prefix + "pre-invocation", Timeout: hookTimeoutSeconds,
 		}},
 		PreToolUse: []hookMatcherGroup{{
 			Matcher: "*",
 			Hooks: []hookHandler{{
-				Type: "command", Command: hookCommandPrefix + "pre-tool-use", Timeout: hookTimeoutSeconds,
+				Type: "command", Command: prefix + "pre-tool-use", Timeout: hookTimeoutSeconds,
 			}},
 		}},
 	}
@@ -260,4 +268,23 @@ func installChatHooks(workspacePath string) error {
 		return err
 	}
 	return hookutil.EnsureWorkspaceGitignore(hooksDir, hookFileName)
+}
+
+func chatHookCommandPrefix() (string, error) {
+	executable, err := agyCurrentAOExecutable()
+	if err != nil {
+		return "", err
+	}
+	executable = strings.TrimSpace(executable)
+	if executable == "" {
+		return "", errors.New("current AO executable path is empty")
+	}
+	return quoteAOExecutable(executable) + hookCommandSuffix, nil
+}
+
+func quoteAOExecutable(path string) string {
+	if runtime.GOOS == "windows" {
+		return `"` + path + `"`
+	}
+	return "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
 }
