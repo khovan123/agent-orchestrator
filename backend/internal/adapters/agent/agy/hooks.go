@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 
 	"github.com/aoagents/agent-orchestrator/backend/internal/adapters/agent/hookutil"
@@ -18,9 +19,11 @@ const (
 	agyHooksDirName      = ".agents"
 	agyHooksFileName     = "hooks.json"
 	agyManagedHookName   = "agent-orchestrator"
-	agyHookCommandPrefix = "ao hooks agy "
+	agyHookCommandSuffix = " hooks agy "
 	agyHookTimeout       = 30
 )
+
+var agyCurrentExecutable = os.Executable
 
 type agyHookEntry struct {
 	Type    string `json:"type,omitempty"`
@@ -49,12 +52,16 @@ func (p *Plugin) GetAgentHooks(ctx context.Context, cfg ports.WorkspaceHookConfi
 		return errors.New("agy.GetAgentHooks: WorkspacePath is required")
 	}
 
+	prefix, err := agyHookCommandPrefix()
+	if err != nil {
+		return fmt.Errorf("agy.GetAgentHooks: resolve AO hook executable: %w", err)
+	}
 	hooksPath := agyHooksPath(cfg.WorkspacePath)
 	topLevel, err := readAgyHooks(hooksPath)
 	if err != nil {
 		return fmt.Errorf("agy.GetAgentHooks: %w", err)
 	}
-	managedJSON, err := json.Marshal(managedAgyHook())
+	managedJSON, err := json.Marshal(managedAgyHook(prefix))
 	if err != nil {
 		return fmt.Errorf("agy.GetAgentHooks: encode managed hook: %w", err)
 	}
@@ -95,6 +102,9 @@ func (p *Plugin) UninstallHooks(ctx context.Context, workspacePath string) error
 }
 
 // AreHooksInstalled reports whether AO's exact managed AGY hook is installed.
+// A legacy bare `ao hooks agy ...` command is deliberately considered stale:
+// desktop launches may not put AO on PATH, so it must be refreshed to the
+// absolute executable path of the running AO binary.
 func (p *Plugin) AreHooksInstalled(ctx context.Context, workspacePath string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -121,17 +131,21 @@ func (p *Plugin) AreHooksInstalled(ctx context.Context, workspacePath string) (b
 	if err := json.Unmarshal(raw, &installed); err != nil {
 		return false, fmt.Errorf("agy.AreHooksInstalled: unmarshal hook: %w", err)
 	}
-	return reflect.DeepEqual(installed, managedAgyHook()), nil
+	prefix, err := agyHookCommandPrefix()
+	if err != nil {
+		return false, fmt.Errorf("agy.AreHooksInstalled: resolve AO hook executable: %w", err)
+	}
+	return reflect.DeepEqual(installed, managedAgyHook(prefix)), nil
 }
 
 func agyHooksPath(workspacePath string) string {
 	return filepath.Join(workspacePath, agyHooksDirName, agyHooksFileName)
 }
 
-func managedAgyHook() agyNamedHook {
+func managedAgyHook(prefix string) agyNamedHook {
 	matcher := "*"
 	entry := func(event string) agyHookEntry {
-		return agyHookEntry{Type: "command", Command: agyHookCommandPrefix + event, Timeout: agyHookTimeout}
+		return agyHookEntry{Type: "command", Command: prefix + event, Timeout: agyHookTimeout}
 	}
 	return agyNamedHook{
 		PreInvocation: []agyHookEntry{entry("pre-invocation")},
@@ -141,6 +155,25 @@ func managedAgyHook() agyNamedHook {
 		}},
 		Stop: []agyHookEntry{entry("stop")},
 	}
+}
+
+func agyHookCommandPrefix() (string, error) {
+	executable, err := agyCurrentExecutable()
+	if err != nil {
+		return "", err
+	}
+	executable = strings.TrimSpace(executable)
+	if executable == "" {
+		return "", errors.New("current AO executable path is empty")
+	}
+	return quoteHookExecutable(executable) + agyHookCommandSuffix, nil
+}
+
+func quoteHookExecutable(path string) string {
+	if runtime.GOOS == "windows" {
+		return `"` + path + `"`
+	}
+	return "'" + strings.ReplaceAll(path, "'", "'\"'\"'") + "'"
 }
 
 // readAgyHooks preserves unowned top-level entries as raw JSON values. Missing
