@@ -19,7 +19,7 @@ const (
 	agyHooksDirName      = ".agents"
 	agyHooksFileName     = "hooks.json"
 	agyManagedHookName   = "agent-orchestrator"
-	agyHookCommandSuffix = " hooks agy "
+	agyHookCommandSuffix = " agy-tui-hook "
 	agyHookTimeout       = 30
 )
 
@@ -102,9 +102,9 @@ func (p *Plugin) UninstallHooks(ctx context.Context, workspacePath string) error
 }
 
 // AreHooksInstalled reports whether AO's exact managed AGY hook is installed.
-// A legacy bare `ao hooks agy ...` command is deliberately considered stale:
-// desktop launches may not put AO on PATH, so it must be refreshed to the
-// absolute executable path of the running AO binary.
+// Legacy bare `ao hooks agy ...` and older bridge commands deliberately count
+// as stale: desktop launches may not put AO on PATH, and current workers need
+// the dedicated TUI bridge for event-specific native responses and Stop relay.
 func (p *Plugin) AreHooksInstalled(ctx context.Context, workspacePath string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
