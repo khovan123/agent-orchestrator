@@ -3,16 +3,21 @@ package agyjson
 import (
 	"context"
 	"encoding/json"
-	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
-	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/aoagents/agent-orchestrator/backend/internal/domain"
+	"github.com/aoagents/agent-orchestrator/backend/internal/ports"
 )
 
 func TestInstallChatHooksPreservesUserDefinitions(t *testing.T) {
+	originalExecutable := agyCurrentAOExecutable
+	agyCurrentAOExecutable = func() (string, error) { return "/opt/agent orchestrator/ao", nil }
+	t.Cleanup(func() { agyCurrentAOExecutable = originalExecutable })
+
 	workspace := t.TempDir()
 	hooksDir := filepath.Join(workspace, ".agents")
 	if err := os.MkdirAll(hooksDir, 0o750); err != nil {
@@ -45,10 +50,14 @@ func TestInstallChatHooksPreservesUserDefinitions(t *testing.T) {
 	if err := json.Unmarshal(raw, &definition); err != nil {
 		t.Fatal(err)
 	}
-	if len(definition.PreInvocation) != 1 || definition.PreInvocation[0].Command != hookCommandPrefix+"pre-invocation" {
+	prefix, err := chatHookCommandPrefix()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(definition.PreInvocation) != 1 || definition.PreInvocation[0].Command != prefix+"pre-invocation" {
 		t.Fatalf("unexpected PreInvocation hooks: %#v", definition.PreInvocation)
 	}
-	if len(definition.PreToolUse) != 1 || definition.PreToolUse[0].Matcher != "*" || len(definition.PreToolUse[0].Hooks) != 1 || definition.PreToolUse[0].Hooks[0].Command != hookCommandPrefix+"pre-tool-use" {
+	if len(definition.PreToolUse) != 1 || definition.PreToolUse[0].Matcher != "*" || len(definition.PreToolUse[0].Hooks) != 1 || definition.PreToolUse[0].Hooks[0].Command != prefix+"pre-tool-use" {
 		t.Fatalf("unexpected PreToolUse hooks: %#v", definition.PreToolUse)
 	}
 }
