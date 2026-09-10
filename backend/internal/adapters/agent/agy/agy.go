@@ -47,6 +47,7 @@ var _ adapters.Adapter = (*Plugin)(nil)
 var _ ports.Agent = (*Plugin)(nil)
 var _ ports.SubmitActivitySignaler = (*Plugin)(nil)
 var _ ports.BlockedActivitySignaler = (*Plugin)(nil)
+var _ ports.AgentExitDetector = (*Plugin)(nil)
 
 // EmitsSubmitActivity reports that PreInvocation proves submitted work has
 // reached AGY's execution loop.
@@ -55,6 +56,13 @@ func (p *Plugin) EmitsSubmitActivity() bool { return true }
 // EmitsBlockedActivity is false because current AGY hooks do not expose a
 // permission-wait event that AO can safely correlate with a session.
 func (p *Plugin) EmitsBlockedActivity() bool { return false }
+
+// ExitDetectionMode opts Agy TUI into AO's generic process supervisor. Current
+// Antigravity workspace hooks expose execution boundaries (Stop) but no
+// SessionEnd event, so process ownership remains authoritative for CLI exit.
+func (p *Plugin) ExitDetectionMode() ports.AgentExitDetectionMode {
+	return ports.AgentExitDetectionSupervisor
+}
 
 // Manifest returns the adapter's static self-description.
 func (p *Plugin) Manifest() adapters.Manifest {
@@ -166,7 +174,6 @@ func ResolveAgyBinary(ctx context.Context) (string, error) {
 }
 
 func (p *Plugin) agyBinary(ctx context.Context) (string, error) {
-	// Fast path: a concurrent-safe read of the already-resolved binary.
 	p.binaryMu.RLock()
 	cached := p.resolvedBinary
 	p.binaryMu.RUnlock()
@@ -174,8 +181,6 @@ func (p *Plugin) agyBinary(ctx context.Context) (string, error) {
 		return cached, nil
 	}
 
-	// Populate path: take the write lock and re-check, since another goroutine
-	// may have resolved the binary between releasing RLock and acquiring Lock.
 	p.binaryMu.Lock()
 	defer p.binaryMu.Unlock()
 	if p.resolvedBinary != "" {
