@@ -28,7 +28,7 @@ func TestHooks_AgyStopReportsNativeFacts(t *testing.T) {
 	out, _, err := executeCLI(t, Deps{
 		In:           strings.NewReader(payload),
 		ProcessAlive: func(int) bool { return true },
-	}, "hooks", "agy", "stop")
+	}, "agy-tui-hook", "stop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestHooks_AgyPreInvocationReportsActiveAndInjectsSystemPrompt(t *testing.T)
 	out, _, err := executeCLI(t, Deps{
 		In:           strings.NewReader(payload),
 		ProcessAlive: func(int) bool { return true },
-	}, "hooks", "agy", "pre-invocation")
+	}, "agy-tui-hook", "pre-invocation")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestHooks_AgyLaterPreInvocationDoesNotDuplicateSystemPrompt(t *testing.T) {
 	out, _, err := executeCLI(t, Deps{
 		In:           strings.NewReader(`{"conversationId":"agy-native-1","invocationNum":1}`),
 		ProcessAlive: func(int) bool { return true },
-	}, "hooks", "agy", "pre-invocation")
+	}, "agy-tui-hook", "pre-invocation")
 	if err != nil {
 		t.Fatal(err)
 	}
