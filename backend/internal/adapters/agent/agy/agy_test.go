@@ -155,6 +155,10 @@ func TestActivitySignalCapabilities(t *testing.T) {
 }
 
 func TestHooksLifecycle(t *testing.T) {
+	originalExecutable := agyCurrentExecutable
+	agyCurrentExecutable = func() (string, error) { return "/opt/agent orchestrator/ao", nil }
+	t.Cleanup(func() { agyCurrentExecutable = originalExecutable })
+
 	tmpDir := t.TempDir()
 	plugin := &Plugin{}
 	cfg := ports.WorkspaceHookConfig{WorkspacePath: tmpDir}
@@ -199,13 +203,17 @@ func TestHooksLifecycle(t *testing.T) {
 	if err := json.Unmarshal(aoRaw, &ao); err != nil {
 		t.Fatal(err)
 	}
-	if len(ao.PreInvocation) != 1 || ao.PreInvocation[0].Command != "ao hooks agy pre-invocation" || ao.PreInvocation[0].Timeout != 30 {
+	prefix, err := agyHookCommandPrefix()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ao.PreInvocation) != 1 || ao.PreInvocation[0].Command != prefix+"pre-invocation" || ao.PreInvocation[0].Timeout != 30 {
 		t.Fatalf("unexpected PreInvocation hooks: %#v", ao.PreInvocation)
 	}
-	if len(ao.PostToolUse) != 1 || ao.PostToolUse[0].Matcher == nil || *ao.PostToolUse[0].Matcher != "*" || len(ao.PostToolUse[0].Hooks) != 1 || ao.PostToolUse[0].Hooks[0].Command != "ao hooks agy post-tool-use" || ao.PostToolUse[0].Hooks[0].Timeout != 30 {
+	if len(ao.PostToolUse) != 1 || ao.PostToolUse[0].Matcher == nil || *ao.PostToolUse[0].Matcher != "*" || len(ao.PostToolUse[0].Hooks) != 1 || ao.PostToolUse[0].Hooks[0].Command != prefix+"post-tool-use" || ao.PostToolUse[0].Hooks[0].Timeout != 30 {
 		t.Fatalf("unexpected PostToolUse hooks: %#v", ao.PostToolUse)
 	}
-	if len(ao.Stop) != 1 || ao.Stop[0].Command != "ao hooks agy stop" || ao.Stop[0].Timeout != 30 {
+	if len(ao.Stop) != 1 || ao.Stop[0].Command != prefix+"stop" || ao.Stop[0].Timeout != 30 {
 		t.Fatalf("unexpected Stop hooks: %#v", ao.Stop)
 	}
 
@@ -304,6 +312,10 @@ func TestHooksRejectMalformedJSON(t *testing.T) {
 }
 
 func TestAreHooksInstalledRejectsDifferentEntryWithManagedName(t *testing.T) {
+	originalExecutable := agyCurrentExecutable
+	agyCurrentExecutable = func() (string, error) { return "/opt/agent orchestrator/ao", nil }
+	t.Cleanup(func() { agyCurrentExecutable = originalExecutable })
+
 	tmpDir := t.TempDir()
 	hooksPath := filepath.Join(tmpDir, ".agents", "hooks.json")
 	if err := os.MkdirAll(filepath.Dir(hooksPath), 0o750); err != nil {
@@ -320,6 +332,37 @@ func TestAreHooksInstalledRejectsDifferentEntryWithManagedName(t *testing.T) {
 	}
 	if installed {
 		t.Fatal("different named entry reported as AO-managed hooks")
+	}
+}
+
+func TestAreHooksInstalledRejectsLegacyBareAOCommands(t *testing.T) {
+	originalExecutable := agyCurrentExecutable
+	agyCurrentExecutable = func() (string, error) { return "/opt/agent orchestrator/ao", nil }
+	t.Cleanup(func() { agyCurrentExecutable = originalExecutable })
+
+	tmpDir := t.TempDir()
+	hooksPath := filepath.Join(tmpDir, ".agents", "hooks.json")
+	if err := os.MkdirAll(filepath.Dir(hooksPath), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := json.Marshal(managedAgyHook("ao hooks agy "))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(map[string]json.RawMessage{agyManagedHookName: legacy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hooksPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	installed, err := (&Plugin{}).AreHooksInstalled(context.Background(), tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if installed {
+		t.Fatal("legacy bare ao hook commands must be refreshed to an absolute path")
 	}
 }
 
