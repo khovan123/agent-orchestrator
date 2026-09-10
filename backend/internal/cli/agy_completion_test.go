@@ -93,7 +93,7 @@ func TestFormatAgyCompletionMessageSeparatesProviderOutcomeFromTaskSuccess(t *te
 	}
 }
 
-func TestHooksAgyStopRelaysProviderFailureToCodexOrchestrator(t *testing.T) {
+func TestAgyTUIStopRelaysProviderFailureToCodexOrchestrator(t *testing.T) {
 	t.Setenv("AO_SESSION_ID", "worker-1")
 	t.Setenv("AO_PROJECT_ID", "mer")
 	t.Setenv("AO_RUNTIME_LAUNCH_ID", "launch-1")
@@ -147,7 +147,7 @@ func TestHooksAgyStopRelaysProviderFailureToCodexOrchestrator(t *testing.T) {
 	out, _, err := executeCLI(t, Deps{
 		In:           strings.NewReader(payload),
 		ProcessAlive: func(int) bool { return true },
-	}, "hooks", "agy", "stop")
+	}, "agy-tui-hook", "stop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestHooksAgyStopRelaysProviderFailureToCodexOrchestrator(t *testing.T) {
 	}
 }
 
-func TestHooksAgyStopWithBackgroundWorkDoesNotRelay(t *testing.T) {
+func TestAgyTUIStopWithBackgroundWorkDoesNotRelay(t *testing.T) {
 	t.Setenv("AO_SESSION_ID", "worker-1")
 	t.Setenv("AO_PROJECT_ID", "mer")
 	t.Setenv("AO_RUNTIME_LAUNCH_ID", "launch-1")
@@ -205,7 +205,7 @@ func TestHooksAgyStopWithBackgroundWorkDoesNotRelay(t *testing.T) {
 	out, _, err := executeCLI(t, Deps{
 		In:           strings.NewReader(`{"conversationId":"agy-native-1","terminationReason":"model_stop","fullyIdle":false}`),
 		ProcessAlive: func(int) bool { return true },
-	}, "hooks", "agy", "stop")
+	}, "agy-tui-hook", "stop")
 	if err != nil {
 		t.Fatal(err)
 	}
